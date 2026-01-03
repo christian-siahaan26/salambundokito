@@ -8,6 +8,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Legend, // Penting untuk dual axis
 } from "recharts";
 import { salesService } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
@@ -22,20 +23,35 @@ const CustomerDashboard = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
 
-  // 1. Update State untuk menampung 4 kategori
+  // State Statistik Kartu Atas
   const [stats, setStats] = useState({
     totalOrders: 0,
-    inProcess: 0, // Sedang Diantar/Diproses
-    completed: 0, // Selesai Diantar
-    pendingPayment: 0, // Menunggu Pembayaran
+    inProcess: 0,
+    completed: 0,
+    pendingPayment: 0,
   });
 
+  // State Data untuk Grafik & Filter
+  const [allPaidOrders, setAllPaidOrders] = useState([]); // Simpan data mentah
   const [chartData, setChartData] = useState([]);
   const [lastActiveOrder, setLastActiveOrder] = useState(null);
+
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [availableYears, setAvailableYears] = useState([
+    new Date().getFullYear(),
+  ]);
 
   useEffect(() => {
     fetchDashboardData();
   }, []);
+
+  // Update grafik saat tahun berubah
+  useEffect(() => {
+    if (allPaidOrders.length > 0 || availableYears.length > 0) {
+      const processed = processChartData(allPaidOrders, selectedYear);
+      setChartData(processed);
+    }
+  }, [selectedYear, allPaidOrders]);
 
   const fetchDashboardData = async () => {
     try {
@@ -49,20 +65,15 @@ const CustomerDashboard = () => {
       ) {
         const userOrders = response.data.data;
 
-        // --- LOGIKA PERHITUNGAN BARU ---
-
-        // A. Total Pesanan
+        // --- 1. LOGIKA KARTU STATISTIK ---
         const totalOrders = userOrders.length;
 
-        // B. Menunggu Pembayaran
         const pendingPayment = userOrders.filter(
           (o) => o.status === "PENDING"
         ).length;
 
-        // C. Selesai Diantar (Status Order SUCCESS && Delivery SENT)
         const completed = userOrders.filter((o) => {
           if (o.status !== "SUCCESS") return false;
-          // Cek status pengiriman
           const delivery = o.delivery && o.delivery[0];
           const dStatus = delivery
             ? (delivery.delivery_status || "").toUpperCase()
@@ -70,8 +81,6 @@ const CustomerDashboard = () => {
           return dStatus === "SENT";
         }).length;
 
-        // D. Sedang Diantar/Diproses (Status Order SUCCESS && Delivery BUKAN SENT)
-        // Ini mencakup: Preparing, On_The_Road, dll.
         const inProcess = userOrders.filter((o) => {
           if (o.status !== "SUCCESS") return false;
           const delivery = o.delivery && o.delivery[0];
@@ -83,14 +92,28 @@ const CustomerDashboard = () => {
 
         setStats({ totalOrders, pendingPayment, completed, inProcess });
 
-        // 2. Last Order
+        // --- 2. PERSIAPAN DATA GRAFIK ---
+        // Ambil hanya order yang sudah dibayar (SUCCESS) untuk grafik pengeluaran
+        const paidOrders = userOrders.filter((o) => o.status === "SUCCESS");
+        setAllPaidOrders(paidOrders);
+
+        // Cari tahun-tahun yang tersedia
+        const years = [
+          ...new Set(
+            paidOrders.map((o) => new Date(o.created_at).getFullYear())
+          ),
+        ];
+        if (years.length > 0) {
+          setAvailableYears(years.sort((a, b) => b - a));
+        }
+
+        // Proses Data Grafik Awal
+        setChartData(processChartData(paidOrders, selectedYear));
+
+        // --- 3. Last Order ---
         if (userOrders.length > 0) {
           setLastActiveOrder(userOrders[0]);
         }
-
-        // 3. Chart Data
-        const processedChart = processChartData(userOrders);
-        setChartData(processedChart);
       }
     } catch (error) {
       console.error("Failed to fetch dashboard data:", error);
@@ -99,25 +122,47 @@ const CustomerDashboard = () => {
     }
   };
 
-  const processChartData = (orders) => {
-    const monthlyData = {};
-    orders.forEach((order) => {
-      // Hanya menghitung yang sudah dibayar (SUCCESS)
-      if (order.status === "SUCCESS") {
-        const date = new Date(order.created_at);
-        const monthYear = date.toLocaleString("id-ID", { month: "short" });
-        if (!monthlyData[monthYear]) {
-          monthlyData[monthYear] = 0;
-        }
-        monthlyData[monthYear] += order.total_amount;
+  const processChartData = (orders, year) => {
+    const months = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "Mei",
+      "Jun",
+      "Jul",
+      "Agu",
+      "Sep",
+      "Okt",
+      "Nov",
+      "Des",
+    ];
+
+    // Template 12 bulan
+    const monthlyData = months.map((month) => ({
+      name: month,
+      expenditure: 0, // Total Uang (Rp)
+      count: 0, // Jumlah Transaksi (Kali)
+    }));
+
+    // Filter berdasarkan tahun
+    const filteredOrders = orders.filter((order) => {
+      const orderYear = new Date(order.created_at).getFullYear();
+      return orderYear === parseInt(year);
+    });
+
+    // Isi data
+    filteredOrders.forEach((order) => {
+      const date = new Date(order.created_at);
+      const monthIndex = date.getMonth();
+
+      if (monthlyData[monthIndex]) {
+        monthlyData[monthIndex].expenditure += order.total_amount;
+        monthlyData[monthIndex].count += 1;
       }
     });
-    return Object.keys(monthlyData)
-      .map((key) => ({
-        name: key,
-        total: monthlyData[key],
-      }))
-      .reverse();
+
+    return monthlyData;
   };
 
   const getDeliveryStatusLabel = (order) => {
@@ -152,9 +197,8 @@ const CustomerDashboard = () => {
           </Button>
         </div>
 
-        {/* 1. Stats Cards (4 KOLOM) */}
+        {/* 1. Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Card 1: Total Pesanan */}
           <Card className="bg-white border-l-4 border-blue-500">
             <div className="flex items-center justify-between">
               <div>
@@ -181,7 +225,6 @@ const CustomerDashboard = () => {
             </div>
           </Card>
 
-          {/* Card 2: Sedang Diantar / Diproses */}
           <Card className="bg-white border-l-4 border-indigo-500">
             <div className="flex items-center justify-between">
               <div>
@@ -210,7 +253,6 @@ const CustomerDashboard = () => {
             </div>
           </Card>
 
-          {/* Card 3: Selesai Diantar */}
           <Card className="bg-white border-l-4 border-green-500">
             <div className="flex items-center justify-between">
               <div>
@@ -237,7 +279,6 @@ const CustomerDashboard = () => {
             </div>
           </Card>
 
-          {/* Card 4: Menunggu Pembayaran */}
           <Card className="bg-white border-l-4 border-yellow-500">
             <div className="flex items-center justify-between">
               <div>
@@ -268,55 +309,131 @@ const CustomerDashboard = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* 2. Grafik Pengeluaran */}
+          {/* 2. Grafik Pengeluaran (2/3 layar) */}
           <div className="lg:col-span-2">
             <Card className="h-full">
-              <h3 className="font-bold text-gray-800 mb-6">
-                Grafik Pengeluaran
-              </h3>
+              {/* Header Grafik & Filter */}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                <h3 className="font-bold text-gray-800">
+                  Grafik Pengeluaran ({selectedYear})
+                </h3>
+
+                <div className="flex items-center gap-2">
+                  <label htmlFor="yearFilter" className="text-sm text-gray-600">
+                    Tahun:
+                  </label>
+                  <select
+                    id="yearFilter"
+                    value={selectedYear}
+                    onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                    className="border border-gray-300 rounded-md px-2 py-1 text-sm focus:ring-primary-500 focus:border-primary-500 outline-none"
+                  >
+                    {availableYears.map((year) => (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
 
               {loading ? (
-                <div className="h-64 flex items-center justify-center">
+                <div className="h-72 flex items-center justify-center">
                   <Loading />
                 </div>
               ) : chartData.length > 0 ? (
-                <div className="h-72 w-full">
+                <div className="h-80 w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData}>
+                    <BarChart
+                      data={chartData}
+                      margin={{ top: 10, right: 10, left: 10, bottom: 20 }}
+                    >
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                      <YAxis hide />
+                      <XAxis
+                        dataKey="name"
+                        axisLine={false}
+                        tickLine={false}
+                        dy={10}
+                      />
+
+                      {/* Sumbu Kiri: Rupiah */}
+                      <YAxis
+                        yAxisId="left"
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fill: "#3B82F6", fontSize: 12 }}
+                        tickFormatter={(value) =>
+                          value === 0 ? "0" : `${value / 1000}k`
+                        }
+                      />
+
+                      {/* Sumbu Kanan: Jumlah Transaksi */}
+                      <YAxis
+                        yAxisId="right"
+                        orientation="right"
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fill: "#F59E0B", fontSize: 12 }}
+                        tickFormatter={(value) => value}
+                      />
+
                       <Tooltip
-                        formatter={(value) => formatCurrency(value)}
+                        cursor={{ fill: "#F3F4F6" }}
+                        formatter={(value, name) => {
+                          if (name === "expenditure")
+                            return [formatCurrency(value), "Total Pengeluaran"];
+                          if (name === "count")
+                            return [`${value} Kali`, "Frekuensi Belanja"];
+                          return [value, name];
+                        }}
                         contentStyle={{
                           borderRadius: "8px",
                           border: "none",
                           boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
                         }}
                       />
+
+                      <Legend
+                        verticalAlign="top"
+                        height={36}
+                        formatter={(value) => {
+                          return value === "expenditure"
+                            ? "Pengeluaran (Rp)"
+                            : "Frekuensi Belanja (Qty)";
+                        }}
+                      />
+
                       <Bar
-                        dataKey="total"
-                        fill="#3B82F6"
+                        yAxisId="left"
+                        dataKey="expenditure"
+                        fill="#3B82F6" // Biru
                         radius={[4, 4, 0, 0]}
-                        barSize={40}
+                        barSize={30}
+                        name="expenditure"
+                      />
+                      <Bar
+                        yAxisId="right"
+                        dataKey="count"
+                        fill="#F59E0B" // Orange
+                        radius={[4, 4, 0, 0]}
+                        barSize={30}
+                        name="count"
                       />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <div className="h-64 flex flex-col items-center justify-center text-gray-400">
+                <div className="h-72 flex flex-col items-center justify-center text-gray-400">
                   <p>Belum ada data transaksi sukses.</p>
                 </div>
               )}
             </Card>
           </div>
 
-          {/* 3. Status Terakhir */}
+          {/* 3. Status Terakhir (1/3 layar) */}
           <div className="lg:col-span-1">
             <Card className="h-full flex flex-col">
-              <h3 className="font-bold text-gray-800 mb-4">
-                Status Pesanan Terakhir
-              </h3>
+              <h3 className="font-bold text-gray-800 mb-4">Pesanan Terakhir</h3>
 
               {loading ? (
                 <Loading />
