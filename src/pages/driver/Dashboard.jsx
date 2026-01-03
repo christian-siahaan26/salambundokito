@@ -8,7 +8,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-} from "recharts"; // 1. Import Recharts
+} from "recharts";
 import { deliveryService } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import DashboardLayout from "../../components/layout/DashboardLayout";
@@ -20,7 +20,7 @@ const DriverDashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // State Statistik
+  // State Statistik Kartu
   const [stats, setStats] = useState({
     total: 0,
     ready: 0,
@@ -28,13 +28,28 @@ const DriverDashboard = () => {
     sent: 0,
   });
 
-  // State Grafik
+  // State Data & Grafik
+  const [myAllTasks, setMyAllTasks] = useState([]); // Simpan semua tugas mentah
   const [chartData, setChartData] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // State Filter Tahun
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [availableYears, setAvailableYears] = useState([
+    new Date().getFullYear(),
+  ]);
 
   useEffect(() => {
     fetchStats();
   }, [user]);
+
+  // Update grafik jika tahun berubah
+  useEffect(() => {
+    if (myAllTasks.length > 0 || availableYears.length > 0) {
+      const processed = processChartData(myAllTasks, selectedYear);
+      setChartData(processed);
+    }
+  }, [selectedYear, myAllTasks]);
 
   const fetchStats = async () => {
     try {
@@ -58,7 +73,21 @@ const DriverDashboard = () => {
         (t) => t.courir_name?.toLowerCase() === user?.name?.toLowerCase()
       );
 
-      // 2. HITUNG STATISTIK KARTU
+      setMyAllTasks(myTasks); // Simpan data mentah
+
+      // 2. AMBIL TAHUN YANG TERSEDIA
+      // Kita ambil tahun dari 'created_at' tugas yang statusnya SENT (Selesai)
+      const finishedTasks = myTasks.filter((t) => t.delivery_status === "SENT");
+      const years = [
+        ...new Set(
+          finishedTasks.map((t) => new Date(t.created_at).getFullYear())
+        ),
+      ];
+      if (years.length > 0) {
+        setAvailableYears(years.sort((a, b) => b - a));
+      }
+
+      // 3. HITUNG STATISTIK KARTU
       setStats({
         total: myTasks.length,
         ready: myTasks.filter((t) => t.delivery_status === "READY").length,
@@ -67,12 +96,11 @@ const DriverDashboard = () => {
             t.delivery_status === "ON_THE_ROAD" ||
             t.delivery_status === "ON_DELIVERY"
         ).length,
-        sent: myTasks.filter((t) => t.delivery_status === "SENT").length,
+        sent: finishedTasks.length,
       });
 
-      // 3. OLAH DATA GRAFIK (Pengantaran Selesai per Bulan)
-      const chart = processChartData(myTasks);
-      setChartData(chart);
+      // 4. PROSES GRAFIK AWAL
+      setChartData(processChartData(myTasks, selectedYear));
     } catch (error) {
       console.error("Failed to fetch stats:", error);
     } finally {
@@ -80,34 +108,45 @@ const DriverDashboard = () => {
     }
   };
 
-  // Helper: Mengubah data menjadi format Grafik
-  const processChartData = (tasks) => {
-    const monthlyCounts = {};
+  const processChartData = (tasks, year) => {
+    const months = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "Mei",
+      "Jun",
+      "Jul",
+      "Agu",
+      "Sep",
+      "Okt",
+      "Nov",
+      "Des",
+    ];
 
-    tasks.forEach((task) => {
-      // Hanya hitung yang statusnya SENT (Selesai)
-      if (task.delivery_status === "SENT") {
-        const date = new Date(task.created_at);
-        const monthYear = date.toLocaleString("id-ID", {
-          month: "short",
-          year: "numeric",
-        }); // Contoh: "Jan 2026"
+    // Template 12 Bulan
+    const monthlyData = months.map((month) => ({
+      name: month,
+      count: 0,
+    }));
 
-        if (!monthlyCounts[monthYear]) {
-          monthlyCounts[monthYear] = 0;
-        }
-        monthlyCounts[monthYear] += 1; // Tambah 1 paket
+    // Filter berdasarkan TAHUN dan status SENT
+    const filteredTasks = tasks.filter((task) => {
+      const taskYear = new Date(task.created_at).getFullYear();
+      return task.delivery_status === "SENT" && taskYear === parseInt(year);
+    });
+
+    // Isi Data
+    filteredTasks.forEach((task) => {
+      const date = new Date(task.created_at);
+      const monthIndex = date.getMonth();
+
+      if (monthlyData[monthIndex]) {
+        monthlyData[monthIndex].count += 1;
       }
     });
 
-    // Convert object ke array untuk Recharts
-    // Hasil: [{ name: "Jan 2026", count: 12 }, ...]
-    return Object.keys(monthlyCounts)
-      .map((key) => ({
-        name: key,
-        count: monthlyCounts[key],
-      }))
-      .reverse();
+    return monthlyData;
   };
 
   if (loading) {
@@ -172,16 +211,37 @@ const DriverDashboard = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-3">
             <Card className="h-full">
-              <h3 className="font-bold text-gray-800 mb-6 text-lg">
-                Grafik Pengantaran Selesai (Bulanan)
-              </h3>
+              {/* Header Grafik & Filter */}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                <h3 className="font-bold text-gray-800 text-lg">
+                  Grafik Pengantaran Selesai ({selectedYear})
+                </h3>
+
+                <div className="flex items-center gap-2">
+                  <label htmlFor="yearFilter" className="text-sm text-gray-600">
+                    Tahun:
+                  </label>
+                  <select
+                    id="yearFilter"
+                    value={selectedYear}
+                    onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                    className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-green-500 focus:border-green-500 outline-none"
+                  >
+                    {availableYears.map((year) => (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
 
               {chartData.length > 0 ? (
                 <div className="h-80 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       data={chartData}
-                      margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                      margin={{ top: 10, right: 30, left: 0, bottom: 20 }}
                     >
                       <CartesianGrid
                         strokeDasharray="3 3"
@@ -196,7 +256,7 @@ const DriverDashboard = () => {
                         dy={10}
                       />
                       <YAxis
-                        allowDecimals={false} // Supaya tidak ada angka pecahan (1.5 paket)
+                        allowDecimals={false} // Angka bulat (1, 2, 3)
                         axisLine={false}
                         tickLine={false}
                         tick={{ fill: "#6B7280" }}
@@ -212,7 +272,7 @@ const DriverDashboard = () => {
                       />
                       <Bar
                         dataKey="count"
-                        fill="#10B981" // Warna Hijau
+                        fill="#10B981" // Warna Hijau (Success)
                         radius={[6, 6, 0, 0]}
                         barSize={50}
                       />
@@ -234,7 +294,7 @@ const DriverDashboard = () => {
                       d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
                     />
                   </svg>
-                  <p>Belum ada data pengantaran selesai.</p>
+                  <p>Belum ada data pengantaran.</p>
                 </div>
               )}
             </Card>
