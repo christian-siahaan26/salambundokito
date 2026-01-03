@@ -7,6 +7,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Legend, // 1. Jangan lupa import Legend
 } from "recharts";
 import { salesService, deliveryService } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
@@ -17,20 +18,35 @@ import { formatCurrency } from "../../utils/helpers";
 
 const AdminDashboard = () => {
   const { user } = useAuth();
+
   const [stats, setStats] = useState({
     totalSalesCount: 0,
     totalRevenue: 0,
     totalDeliveries: 0,
     pendingDeliveries: 0,
     completedDeliveries: 0,
-    pendingPaymentCount: 0, // 1. Tambahkan state baru
+    pendingPaymentCount: 0,
   });
+
+  const [allPaidOrders, setAllPaidOrders] = useState([]);
   const [chartData, setChartData] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [availableYears, setAvailableYears] = useState([
+    new Date().getFullYear(),
+  ]);
 
   useEffect(() => {
     fetchStats();
   }, []);
+
+  useEffect(() => {
+    if (allPaidOrders.length > 0) {
+      const processed = processChartData(allPaidOrders, selectedYear);
+      setChartData(processed);
+    }
+  }, [selectedYear, allPaidOrders]);
 
   const fetchStats = async () => {
     try {
@@ -52,24 +68,27 @@ const AdminDashboard = () => {
       const sales = getArrayData(salesResponse);
       const deliveries = getArrayData(deliveriesResponse);
 
-      // --- LOGIKA STATISTIK ---
-
-      // A. Total Transaksi (Count)
+      // Logika Statistik
       const totalSalesCount = sales.length;
-
-      // B. Hitung Total Pendapatan (Hanya yang SUCCESS)
       const paidOrders = sales.filter((s) => s.status === "SUCCESS");
+      setAllPaidOrders(paidOrders);
+
+      const years = [
+        ...new Set(paidOrders.map((o) => new Date(o.created_at).getFullYear())),
+      ];
+      if (years.length > 0) {
+        setAvailableYears(years.sort((a, b) => b - a));
+      }
+
       const totalRevenue = paidOrders.reduce(
         (acc, curr) => acc + curr.total_amount,
         0
       );
 
-      // C. Hitung Menunggu Pembayaran (Status PENDING) - BARU
       const pendingPaymentCount = sales.filter(
         (s) => s.status === "PENDING"
       ).length;
 
-      // D. Logika Pengiriman
       const totalDeliveries = paidOrders.length;
       const completedDeliveries = deliveries.filter((d) => {
         const status = (
@@ -88,12 +107,10 @@ const AdminDashboard = () => {
         totalDeliveries,
         pendingDeliveries,
         completedDeliveries,
-        pendingPaymentCount, // Simpan ke state
+        pendingPaymentCount,
       });
 
-      // --- LOGIKA GRAFIK ---
-      const processedChart = processChartData(paidOrders);
-      setChartData(processedChart);
+      setChartData(processChartData(paidOrders, selectedYear));
     } catch (error) {
       console.error("Failed to fetch stats:", error);
     } finally {
@@ -101,26 +118,45 @@ const AdminDashboard = () => {
     }
   };
 
-  const processChartData = (orders) => {
-    const monthlyData = {};
-    orders.forEach((order) => {
-      const date = new Date(order.created_at);
-      const monthYear = date.toLocaleString("id-ID", {
-        month: "short",
-        year: "numeric",
-      });
-      if (!monthlyData[monthYear]) {
-        monthlyData[monthYear] = 0;
-      }
-      monthlyData[monthYear] += order.total_amount;
+  const processChartData = (orders, year) => {
+    const months = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "Mei",
+      "Jun",
+      "Jul",
+      "Agu",
+      "Sep",
+      "Okt",
+      "Nov",
+      "Des",
+    ];
+
+    // 2. Inisialisasi Revenue (0) DAN Count (0)
+    const monthlyData = months.map((month) => ({
+      name: month,
+      revenue: 0,
+      count: 0, // Field baru untuk jumlah transaksi
+    }));
+
+    const filteredOrders = orders.filter((order) => {
+      const orderYear = new Date(order.created_at).getFullYear();
+      return orderYear === parseInt(year);
     });
 
-    return Object.keys(monthlyData)
-      .map((key) => ({
-        name: key,
-        revenue: monthlyData[key],
-      }))
-      .reverse();
+    filteredOrders.forEach((order) => {
+      const date = new Date(order.created_at);
+      const monthIndex = date.getMonth();
+
+      if (monthlyData[monthIndex]) {
+        monthlyData[monthIndex].revenue += order.total_amount;
+        monthlyData[monthIndex].count += 1; // 3. Tambah jumlah transaksi
+      }
+    });
+
+    return monthlyData;
   };
 
   if (loading) {
@@ -143,7 +179,6 @@ const AdminDashboard = () => {
               Ringkasan performa penjualan dan pengiriman.
             </p>
           </div>
-          {/* Bagian Total Pendapatan Bersih (TETAP ADA sesuai request) */}
           <div className="text-right hidden md:block">
             <p className="text-sm text-gray-500">Total Pendapatan Bersih</p>
             <p className="text-2xl font-bold text-primary-600">
@@ -152,9 +187,8 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        {/* --- GRID STATS --- */}
+        {/* --- GRID STATS (Tidak Berubah) --- */}
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* 1. Card Total Transaksi */}
           <Card>
             <div className="flex items-center justify-between">
               <div>
@@ -174,14 +208,13 @@ const AdminDashboard = () => {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+                    d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2-2v14a2 2 0 002 2z"
                   />
                 </svg>
               </div>
             </div>
           </Card>
 
-          {/* 2. Card Perlu Diantar (Pengiriman) */}
           <Card className="border-l-4 border-yellow-500">
             <div className="flex items-center justify-between">
               <div>
@@ -209,7 +242,6 @@ const AdminDashboard = () => {
             </div>
           </Card>
 
-          {/* 3. Card Selesai Diantar */}
           <Card className="border-l-4 border-green-500">
             <div className="flex items-center justify-between">
               <div>
@@ -237,7 +269,6 @@ const AdminDashboard = () => {
             </div>
           </Card>
 
-          {/* 4. Card Menunggu Pembayaran (MENGGANTIKAN PENDAPATAN) */}
           <Card className="border-l-4 border-red-500">
             <div className="flex items-center justify-between">
               <div>
@@ -248,7 +279,6 @@ const AdminDashboard = () => {
                 <p className="text-xs text-gray-400 mt-1">Belum Bayar</p>
               </div>
               <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                {/* Icon Kartu Kredit / Invoice */}
                 <svg
                   className="w-6 h-6 text-red-600"
                   fill="none"
@@ -267,20 +297,42 @@ const AdminDashboard = () => {
           </Card>
         </div>
 
-        {/* Grafik Pendapatan */}
+        {/* --- BAGIAN GRAFIK --- */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-3">
             <Card className="h-full">
-              <h3 className="font-bold text-gray-800 mb-6 text-lg">
-                Grafik Pendapatan Bulanan
-              </h3>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                <h3 className="font-bold text-gray-800 text-lg">
+                  Grafik Performa Bulanan ({selectedYear})
+                </h3>
+
+                <div className="flex items-center gap-2">
+                  <label htmlFor="yearFilter" className="text-sm text-gray-600">
+                    Tahun:
+                  </label>
+                  <select
+                    id="yearFilter"
+                    value={selectedYear}
+                    onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                    className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-primary-500 focus:border-primary-500 outline-none"
+                  >
+                    {availableYears.map((year) => (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
 
               {chartData.length > 0 ? (
-                <div className="h-80 w-full">
+                <div className="h-96 w-full">
+                  {" "}
+                  {/* Height diperbesar sedikit */}
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       data={chartData}
-                      margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                      margin={{ top: 10, right: 30, left: 10, bottom: 20 }}
                     >
                       <CartesianGrid
                         strokeDasharray="3 3"
@@ -294,39 +346,80 @@ const AdminDashboard = () => {
                         tick={{ fill: "#6B7280" }}
                         dy={10}
                       />
+
+                      {/* 4. SUMBU Y KIRI (PENDAPATAN) */}
                       <YAxis
-                        width={85}
+                        yAxisId="left"
                         axisLine={false}
                         tickLine={false}
-                        tick={{ fill: "#6B7280", fontSize: 12 }}
+                        tick={{ fill: "#4F46E5", fontSize: 12 }} // Warna Biru
                         tickFormatter={(value) =>
-                          value === 0 ? "0" : `Rp ${value / 1000}k`
+                          value === 0 ? "0" : `${value / 1000}k`
                         }
                       />
+
+                      {/* 5. SUMBU Y KANAN (JUMLAH TRANSAKSI) */}
+                      <YAxis
+                        yAxisId="right"
+                        orientation="right"
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fill: "#F59E0B", fontSize: 12 }} // Warna Orange
+                        tickFormatter={(value) => value} // Tampilkan angka bulat
+                      />
+
                       <Tooltip
                         cursor={{ fill: "#F3F4F6" }}
-                        formatter={(value) => [
-                          formatCurrency(value),
-                          "Pendapatan",
-                        ]}
+                        formatter={(value, name) => {
+                          if (name === "revenue")
+                            return [formatCurrency(value), "Pendapatan"];
+                          if (name === "count")
+                            return [`${value} Transaksi`, "Jumlah Order"];
+                          return [value, name];
+                        }}
                         contentStyle={{
                           borderRadius: "8px",
                           border: "none",
                           boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
                         }}
                       />
+
+                      {/* 6. LEGENDA WARNA */}
+                      <Legend
+                        verticalAlign="top"
+                        height={36}
+                        formatter={(value) => {
+                          return value === "revenue"
+                            ? "Pendapatan (Rp)"
+                            : "Jumlah Order (Qty)";
+                        }}
+                      />
+
+                      {/* 7. BAR BIRU (PENDAPATAN) */}
                       <Bar
+                        yAxisId="left"
                         dataKey="revenue"
-                        fill="#4F46E5"
-                        radius={[6, 6, 0, 0]}
-                        barSize={50}
+                        fill="#4F46E5" // Biru
+                        radius={[4, 4, 0, 0]}
+                        barSize={30}
+                        name="revenue"
+                      />
+
+                      {/* 8. BAR ORANGE (JUMLAH ORDER) */}
+                      <Bar
+                        yAxisId="right"
+                        dataKey="count"
+                        fill="#F59E0B" // Orange
+                        radius={[4, 4, 0, 0]}
+                        barSize={30}
+                        name="count"
                       />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               ) : (
                 <div className="h-64 flex flex-col items-center justify-center text-gray-400 bg-gray-50 rounded-lg">
-                  <p>Belum ada data transaksi sukses untuk ditampilkan.</p>
+                  <p>Tidak ada data.</p>
                 </div>
               )}
             </Card>
