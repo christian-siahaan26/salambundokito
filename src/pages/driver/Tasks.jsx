@@ -33,6 +33,7 @@ const DriverTasks = () => {
         allTasks = response.data;
       }
 
+      // Filter tugas milik kurir yang login
       const myTasks = allTasks.filter(
         (t) => t.courir_name?.toLowerCase() === user?.name?.toLowerCase()
       );
@@ -45,7 +46,6 @@ const DriverTasks = () => {
   };
 
   const handleUpdateStatus = async (deliveryId, newStatus) => {
-    // Konfirmasi sebelum update
     if (
       !confirm(
         `Ubah status menjadi ${
@@ -58,14 +58,9 @@ const DriverTasks = () => {
 
     setUpdatingId(deliveryId);
     try {
-      // 1. KIRIM REQUEST (Sesuai API: "ON_THE_ROAD" atau "SENT")
       const payload = { delivery_status: newStatus };
       const response = await deliveryService.updateStatus(deliveryId, payload);
 
-      console.log("Update Response:", response); // Debugging
-
-      // 2. CEK KEBERHASILAN (Handling Backend Bug: status false tapi message success)
-      // Kita anggap sukses jika ada 'data' atau message mengandung 'Success'
       const isSuccess =
         response.status === true ||
         (response.message &&
@@ -74,13 +69,12 @@ const DriverTasks = () => {
 
       if (isSuccess) {
         alert("Status berhasil diperbarui!");
-        fetchTasks(); // Refresh data
+        fetchTasks();
       } else {
         alert(response.message || "Gagal update status.");
       }
     } catch (err) {
       console.error("Update error:", err);
-      // Handle error jika axios throw error (misal 404/500)
       alert(err.response?.data?.message || "Terjadi kesalahan sistem.");
     } finally {
       setUpdatingId(null);
@@ -108,6 +102,28 @@ const DriverTasks = () => {
     );
   };
 
+  // Fungsi Helper untuk membuka WhatsApp (Opsional, fitur keren untuk driver)
+  const openWhatsApp = (phone) => {
+    if (!phone) return;
+    // Format nomor HP (hapus 0 di depan ganti 62, atau biarkan jika sudah format benar)
+    let formatted = phone.replace(/\D/g, "");
+    if (formatted.startsWith("0")) {
+      formatted = "62" + formatted.substring(1);
+    }
+    window.open(`https://wa.me/${formatted}`, "_blank");
+  };
+
+  // Fungsi Helper untuk buka Google Maps (Opsional)
+  const openMaps = (address) => {
+    if (!address) return;
+    window.open(
+      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+        address
+      )}`,
+      "_blank"
+    );
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -126,12 +142,16 @@ const DriverTasks = () => {
             {tasks.map((task) => {
               const status = (task.delivery_status || "").toUpperCase();
 
+              // 1. AMBIL DATA CUSTOMER DARI RELASI ORDER
+              // Pastikan Backend sudah include: { order: { include: { user: true } } }
+              const customer = task.order?.user;
+
               return (
                 <Card
                   key={task.delivery_id}
                   className="border-l-4 border-primary-500"
                 >
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
+                  <div className="flex flex-col md:flex-row md:items-start md:justify-between space-y-4 md:space-y-0">
                     {/* Info Kiri */}
                     <div className="flex-1">
                       <div className="flex items-center space-x-3 mb-2">
@@ -141,7 +161,7 @@ const DriverTasks = () => {
                         {getStatusBadge(status)}
                       </div>
 
-                      <div className="space-y-1 text-sm text-gray-600">
+                      <div className="space-y-1 text-sm text-gray-600 mb-4">
                         <p>
                           <span className="font-medium">Order ID:</span>{" "}
                           <span className="font-mono text-blue-600">
@@ -153,11 +173,70 @@ const DriverTasks = () => {
                           {formatDate(task.created_at)}
                         </p>
                       </div>
+
+                      {/* --- 2. TAMPILAN DATA CUSTOMER (ALAMAT & HP) --- */}
+                      <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 max-w-md">
+                        <p className="text-xs text-gray-500 font-bold uppercase mb-2">
+                          Info Penerima (Customer)
+                        </p>
+
+                        {customer ? (
+                          <div className="space-y-2 text-sm">
+                            <div className="flex items-start gap-2">
+                              <span className="text-gray-400 mt-0.5">👤</span>
+                              <span className="font-medium text-gray-900">
+                                {customer.name}
+                              </span>
+                            </div>
+
+                            <div className="flex items-start gap-2">
+                              <span className="text-gray-400 mt-0.5">📍</span>
+                              <div className="flex-1">
+                                <span className="text-gray-700 block mb-1">
+                                  {customer.addres || "Alamat tidak tersedia"}
+                                </span>
+                                {/* Tombol Maps Kecil
+                                {customer.addres && (
+                                  <button
+                                    onClick={() => openMaps(customer.addres)}
+                                    className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                                  >
+                                    Lihat di Peta ↗
+                                  </button>
+                                )} */}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-400">📞</span>
+                              <span className="text-gray-700 font-mono">
+                                {customer.phone || "-"}
+                              </span>
+                              {/* Tombol WA Kecil */}
+                              {customer.phone && (
+                                <button
+                                  onClick={() => openWhatsApp(customer.phone)}
+                                  className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded hover:bg-green-200"
+                                >
+                                  Chat WA
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-red-500 text-sm italic">
+                            Data customer tidak ditemukan. <br />
+                            <span className="text-xs text-gray-400">
+                              (Pastikan Backend sudah include order.user)
+                            </span>
+                          </p>
+                        )}
+                      </div>
+                      {/* ----------------------------------------------- */}
                     </div>
 
-                    {/* Tombol Aksi Kanan */}
-                    <div className="flex flex-col gap-2 min-w-[140px]">
-                      {/* STATUS: READY -> Kirim "ON_THE_ROAD" */}
+                    {/* Tombol Aksi Kanan (Status) */}
+                    <div className="flex flex-col gap-2 min-w-[140px] mt-4 md:mt-0">
                       {status === "READY" && (
                         <Button
                           onClick={() =>
@@ -169,7 +248,6 @@ const DriverTasks = () => {
                         </Button>
                       )}
 
-                      {/* STATUS: ON_THE_ROAD -> Kirim "SENT" */}
                       {(status === "ON_THE_ROAD" ||
                         status === "ON_DELIVERY") && (
                         <Button
@@ -184,9 +262,11 @@ const DriverTasks = () => {
                       )}
 
                       {status === "SENT" && (
-                        <span className="text-center text-sm font-bold text-gray-400">
-                          Tugas Selesai
-                        </span>
+                        <div className="text-center p-2 bg-gray-50 rounded">
+                          <span className="text-sm font-bold text-gray-400">
+                            Tugas Selesai
+                          </span>
+                        </div>
                       )}
                     </div>
                   </div>
