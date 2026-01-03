@@ -4,7 +4,6 @@ import { salesService } from "../../services/api";
 import DashboardLayout from "../../components/layout/DashboardLayout";
 import Card from "../../components/ui/Card";
 import Badge from "../../components/ui/Badge";
-import Button from "../../components/ui/Button";
 import Loading from "../../components/ui/Loading";
 import { formatCurrency } from "../../utils/helpers";
 
@@ -34,7 +33,6 @@ const AdminOrderDetail = () => {
     }
   };
 
-  // Fungsi untuk Copy ID ke Clipboard
   const handleCopyId = () => {
     if (order && order.order_id) {
       navigator.clipboard.writeText(order.order_id);
@@ -42,16 +40,29 @@ const AdminOrderDetail = () => {
     }
   };
 
+  // --- LOGIKA WARNA DISAMAKAN DENGAN DAFTAR PESANAN ---
   const getDeliveryStatusText = (orderData) => {
+    // Cek Payment dulu
+    if (orderData.status === "PENDING") {
+      return { label: "Menunggu Bayar", color: "gray" };
+    }
+
     const delivery = orderData.delivery && orderData.delivery[0];
     const status = delivery
       ? (delivery.delivery_status || "").toUpperCase()
       : "";
+
     if (status === "SENT")
       return { label: "Diterima Customer", color: "green" };
-    if (status === "ON_THE_ROAD")
+    if (status === "ON_THE_ROAD" || status === "ON_DELIVERY")
       return { label: "Sedang Diantar", color: "blue" };
-    if (status === "READY") return { label: "Siap Dikirim", color: "yellow" };
+    if (status === "READY") return { label: "Siap Dikirim", color: "yellow" }; // Kuning
+
+    // Jika sudah bayar tapi belum ada data pengiriman -> Perlu Diproses
+    if (orderData.status === "SUCCESS") {
+      return { label: "Perlu Diproses", color: "yellow" }; // Kuning
+    }
+
     return { label: "Belum Diproses", color: "gray" };
   };
 
@@ -93,7 +104,6 @@ const AdminOrderDetail = () => {
           <div className="md:col-span-2 space-y-6">
             <Card>
               <div className="flex justify-between mb-4">
-                {/* --- PERBAIKAN DI SINI: ORDER ID LENGKAP --- */}
                 <div className="flex-1 mr-4">
                   <p className="text-sm text-gray-500 mb-1">Order ID (Full)</p>
                   <div className="flex items-center gap-2 bg-gray-50 p-2 rounded border border-gray-200">
@@ -105,7 +115,6 @@ const AdminOrderDetail = () => {
                       title="Salin Order ID"
                       className="text-primary-600 hover:text-primary-800 p-1"
                     >
-                      {/* Icon Copy SVG */}
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
                         className="h-5 w-5"
@@ -123,48 +132,62 @@ const AdminOrderDetail = () => {
                     </button>
                   </div>
                 </div>
-                {/* ------------------------------------------- */}
-
                 <div className="text-right whitespace-nowrap">
                   <Badge status={order.status} type="payment" />
                 </div>
               </div>
 
               <div className="border-t py-4">
-                <p className="font-bold mb-2">Item Pesanan</p>
+                <p className="font-bold mb-4">Item Pesanan</p>
                 {!order.order_items || order.order_items.length === 0 ? (
                   <p className="text-gray-500 italic">Tidak ada detail item.</p>
                 ) : (
-                  order.order_items.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="flex justify-between border-b py-2 last:border-0"
-                    >
-                      <span>
-                        {item.product?.name || "Produk Gas"} x {item.quantity}
-                      </span>
-                      <span className="font-medium">
-                        {formatCurrency(item.price * item.quantity)}
-                      </span>
-                    </div>
-                  ))
+                  <div className="space-y-4">
+                    {order.order_items.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="flex justify-between items-start border-b pb-4 last:border-0 last:pb-0"
+                      >
+                        <div className="flex-1 pr-4">
+                          <p className="font-medium text-gray-900">
+                            {item.product?.name || "Produk Gas"}
+                            <span className="text-gray-500 text-sm ml-2">
+                              x {item.quantity}
+                            </span>
+                          </p>
+                          {item.product?.description && (
+                            <div className="mt-1 p-2 bg-gray-50 rounded text-xs text-gray-600">
+                              <span className="font-semibold text-gray-500 block mb-0.5">
+                                Deskripsi:
+                              </span>
+                              {item.product.description}
+                            </div>
+                          )}
+                        </div>
+                        <span className="font-bold text-gray-900 whitespace-nowrap">
+                          {formatCurrency(item.price * item.quantity)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             </Card>
 
-            {/* AREA AKSI PENGIRIMAN */}
-            <Card className="border-l-4 border-primary-500">
+            {/* --- BAGIAN INI DIUBAH AGAR DINAMIS MENGIKUTI WARNA STATUS --- */}
+            <Card className={`border-l-4 border-${statusInfo.color}-500`}>
               <h3 className="font-bold text-gray-900 mb-4">Aksi Pengiriman</h3>
-              <div className="p-4 bg-gray-50 rounded mb-4">
+              <div className={`p-4 bg-${statusInfo.color}-50 rounded mb-4`}>
                 <p className="text-sm text-gray-600">Status Saat Ini:</p>
-                <p className={`font-bold text-${statusInfo.color}-600 text-lg`}>
+                {/* Text warna dinamis */}
+                <p className={`font-bold text-${statusInfo.color}-700 text-lg`}>
                   {statusInfo.label}
                 </p>
               </div>
             </Card>
+            {/* ------------------------------------------------------------- */}
           </div>
 
-          {/* Info Customer */}
           <div className="space-y-6">
             <Card>
               <h3 className="font-bold text-gray-900 mb-4">Data Pelanggan</h3>
@@ -174,6 +197,30 @@ const AdminOrderDetail = () => {
                   <p className="font-mono text-xs break-all">{order.user_id}</p>
                 </div>
                 <div>
+                  <p className="text-gray-500">Nama Pelanggan</p>
+                  <p className="font-mono font-medium text-gray-900 break-all">
+                    {order.user?.name || "-"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Email</p>
+                  <p className="font-mono text-xs break-all">
+                    {order.user?.email || "-"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">No Handphone</p>
+                  <p className="font-mono text-xs break-all">
+                    {order.user?.phone || "-"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Alamat</p>
+                  <p className="font-medium text-gray-800 break-all">
+                    {order.user?.addres || "-"}
+                  </p>
+                </div>
+                <div className="pt-3 border-t">
                   <p className="text-gray-500">Total Pembayaran</p>
                   <p className="font-bold text-lg text-primary-600">
                     {formatCurrency(order.total_amount)}
