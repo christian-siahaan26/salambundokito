@@ -4,12 +4,14 @@ import DashboardLayout from "../../components/layout/DashboardLayout";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Loading from "../../components/ui/Loading";
+import Alert from "../../components/ui/Alert";
 import { formatDate } from "../../utils/helpers";
 
 const AdminDeliveries = () => {
   const [deliveries, setDeliveries] = useState([]);
   const [couriers, setCouriers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [alert, setAlert] = useState(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -68,10 +70,14 @@ const AdminDeliveries = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitLoading(true);
-    setError("");
+    setAlert(null);
 
     if (!formData.courir_name) {
-      setError("Silakan pilih kurir terlebih dahulu");
+      // setError("Silakan pilih kurir terlebih dahulu");
+      setAlert({
+        type: "error",
+        message: "Silahkan pilih kurir terlebih dahulu",
+      });
       setSubmitLoading(false);
       return;
     }
@@ -83,13 +89,22 @@ const AdminDeliveries = () => {
         setIsModalOpen(false);
         setFormData({ order_id: "", courir_name: "" });
         fetchData();
-        alert("Pengiriman berhasil dibuat!");
+        setAlert({
+          type: "success",
+          message: "Pengiriman berhasil dibuat!",
+        });
       } else {
-        setError(response.message || "Gagal membuat pengiriman");
+        setAlert({
+          type: "error",
+          message: response.message || "Gagal membuat pengiriman",
+        });
       }
     } catch (err) {
       console.error(err);
-      setError(err.response?.data?.message || "Terjadi kesalahan sistem");
+      setAlert({
+        type: "error",
+        message: err.response?.data?.message || "Terjadi kesalahan sistem",
+      });
     } finally {
       setSubmitLoading(false);
     }
@@ -122,6 +137,14 @@ const AdminDeliveries = () => {
 
   return (
     <DashboardLayout>
+      {alert && (
+        <Alert
+          type={alert.type}
+          message={alert.message}
+          onClose={() => setAlert(null)}
+        />
+      )}
+
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold text-gray-900">

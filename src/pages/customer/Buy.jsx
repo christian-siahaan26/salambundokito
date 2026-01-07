@@ -5,6 +5,7 @@ import DashboardLayout from "../../components/layout/DashboardLayout";
 import Card from "../../components/ui/Card";
 import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
+import Alert from "../../components/ui/Alert";
 import { formatCurrency } from "../../utils/helpers";
 
 const PRICE_PER_UNIT = 20000;
@@ -14,6 +15,7 @@ const CustomerBuy = () => {
   const navigate = useNavigate();
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [alert, setAlert] = useState(null);
   const [error, setError] = useState("");
 
   const totalPrice = quantity * PRICE_PER_UNIT;
@@ -22,18 +24,21 @@ const CustomerBuy = () => {
     const value = parseInt(e.target.value) || 1;
     if (value > 0 && value <= 100) {
       setQuantity(value);
-      setError("");
+      setAlert(null);
     }
   };
 
   const handleBuy = async () => {
     if (quantity < 1) {
-      setError("Jumlah minimal 1 tabung");
+      setAlert({
+        type: "error",
+        message: "Jumlah minimal 1 tabung",
+      });
       return;
     }
 
     setLoading(true);
-    setError("");
+    setAlert(null);
 
     try {
       const orderPayload = {
@@ -53,16 +58,20 @@ const CustomerBuy = () => {
         window.snap.pay(snapToken, {
           onSuccess: function (result) {
             console.log("Payment success:", result);
-            sukses;
+            setLoading(false);
             navigate(`/customer/dashboard`);
           },
           onPending: function (result) {
             console.log("Payment pending:", result);
+            setLoading(false);
             navigate(`/customer/dashboard`);
           },
           onError: function (result) {
             console.log("Payment error:", result);
-            setError("Pembayaran gagal. Silakan coba lagi.");
+            setAlert({
+              type: "error",
+              message: "Pembayaran gagal. Silakan coba lagi.",
+            });
             setLoading(false);
           },
           onClose: function () {
@@ -71,18 +80,32 @@ const CustomerBuy = () => {
           },
         });
       } else {
-        setError(response.message || "Gagal membuat pesanan");
+        setAlert({
+          type: "error",
+          message: response.message || "Gagal membuat pesanan",
+        });
         setLoading(false);
       }
     } catch (err) {
       console.error("Buy error:", err);
-      setError(err.response?.data?.message || "Terjadi kesalahan sistem");
+      // setError(err.response?.data?.message || "Terjadi kesalahan sistem");
+      setAlert({
+        type: "error",
+        message: err.response?.data?.message || "Terjadi kesalahan sistem",
+      });
       setLoading(false);
     }
   };
 
   return (
     <DashboardLayout>
+      {alert && (
+        <Alert
+          type={alert.type}
+          message={alert.message}
+          onClose={() => setAlert(null)}
+        />
+      )}
       <div className="max-w-2xl mx-auto space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Beli Gas 3Kg</h1>

@@ -5,12 +5,18 @@ import DashboardLayout from "../../components/layout/DashboardLayout";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Loading from "../../components/ui/Loading";
+import Alert from "../../components/ui/Alert";
+import ConfirmationModal from "../../components/ui/ConfirmationModal";
 import { formatDate } from "../../utils/helpers";
 
 const DriverTasks = () => {
   const { user } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [alert, setAlert] = useState(null);
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [targetTask, setTargetTask] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
 
   useEffect(() => {
@@ -44,21 +50,22 @@ const DriverTasks = () => {
     }
   };
 
-  const handleUpdateStatus = async (deliveryId, newStatus) => {
-    if (
-      !confirm(
-        `Ubah status menjadi ${
-          newStatus === "SENT" ? "SELESAI" : "SEDANG JALAN"
-        }?`
-      )
-    ) {
-      return;
-    }
+  const confirmUpdateStatus = (deliveryId, newStatus) => {
+    setTargetTask({ id: deliveryId, newStatus });
+    setIsModalOpen(true);
+  };
 
-    setUpdatingId(deliveryId);
+  const handleExecuteUpdate = async () => {
+    if (!targetTask) return;
+
+    setUpdatingId(targetTask.id);
+
     try {
-      const payload = { delivery_status: newStatus };
-      const response = await deliveryService.updateStatus(deliveryId, payload);
+      const payload = { delivery_status: targetTask.newStatus };
+      const response = await deliveryService.updateStatus(
+        targetTask.id,
+        payload
+      );
 
       const isSuccess =
         response.status === true ||
@@ -67,16 +74,27 @@ const DriverTasks = () => {
         response.data;
 
       if (isSuccess) {
-        alert("Status berhasil diperbarui!");
+        setAlert({
+          type: "success",
+          message: "Status berhasil diperbarui!",
+        });
         fetchTasks();
       } else {
-        alert(response.message || "Gagal update status.");
+        setAlert({
+          type: "error",
+          message: response.message || "Gagal update status.",
+        });
       }
     } catch (err) {
       console.error("Update error:", err);
-      alert(err.response?.data?.message || "Terjadi kesalahan sistem.");
+      setAlert({
+        type: "error",
+        message: err.message?.data?.message || "Terjadi kesalahan sistem.",
+      });
     } finally {
       setUpdatingId(null);
+      setIsModalOpen(false);
+      setTargetTask(null);
     }
   };
 
@@ -110,18 +128,42 @@ const DriverTasks = () => {
     window.open(`https://wa.me/${formatted}`, "_blank");
   };
 
-  const openMaps = (address) => {
-    if (!address) return;
-    window.open(
-      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-        address
-      )}`,
-      "_blank"
-    );
-  };
+  // const openMaps = (address) => {
+  //   if (!address) return;
+  //   window.open(
+  //     `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+  //       address
+  //     )}`,
+  //     "_blank"
+  //   );
+  // };
 
   return (
     <DashboardLayout>
+      {alert && (
+        <Alert
+          type={alert.type}
+          message={alert.message}
+          onClose={() => setAlert(null)}
+        />
+      )}
+
+      <ConfirmationModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onConfirm={handleExecuteUpdate}
+        title="Konfirmasi Update Status"
+        confirmLabel="Ya, Ubah"
+        variant="primary"
+        isLoading={updatingId !== null}
+        message={
+          targetTask
+            ? `Apakah Anda yakin ingin mengubah status menjadi "${
+                targetTask.newStatus === "SENT" ? "SELESAI" : "SEDANG JALAN"
+              }"?`
+            : ""
+        }
+      />
       <div className="space-y-6">
         <h1 className="text-3xl font-bold text-gray-900">Tugas Pengantaran</h1>
 
@@ -233,9 +275,8 @@ const DriverTasks = () => {
                       {status === "READY" && (
                         <Button
                           onClick={() =>
-                            handleUpdateStatus(task.delivery_id, "ON_THE_ROAD")
+                            confirmUpdateStatus(task.delivery_id, "ON_THE_ROAD")
                           }
-                          loading={updatingId === task.delivery_id}
                         >
                           🚀 Mulai Jalan
                         </Button>
@@ -246,9 +287,8 @@ const DriverTasks = () => {
                         <Button
                           className="bg-green-600 hover:bg-green-700"
                           onClick={() =>
-                            handleUpdateStatus(task.delivery_id, "SENT")
+                            confirmUpdateStatus(task.delivery_id, "SENT")
                           }
-                          loading={updatingId === task.delivery_id}
                         >
                           ✅ Selesai
                         </Button>

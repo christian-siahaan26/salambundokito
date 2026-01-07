@@ -7,20 +7,34 @@ const ConfirmationModal = ({
   title,
   message,
   isLoading,
+  confirmLabel = "Hapus", // Default text
+  variant = "danger", // Default warna: 'danger' (merah) atau 'primary' (biru)
 }) => {
   if (!isOpen) return null;
+
+  // Tentukan warna berdasarkan variant
+  const isDanger = variant === "danger";
+
+  const iconBgClass = isDanger ? "bg-red-100" : "bg-blue-100";
+  const iconColorClass = isDanger ? "text-red-600" : "text-blue-600";
+  const buttonClass = isDanger
+    ? "bg-red-600 hover:bg-red-700 text-white border-red-600"
+    : "bg-primary-600 hover:bg-primary-700 text-white border-primary-600"; // Sesuaikan dengan warna primary Anda
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 animate-fade-in">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 transform transition-all scale-100">
-        {/* Icon Peringatan */}
-        <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+        {/* Icon Peringatan (Warna Dinamis) */}
+        <div
+          className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full mb-4 ${iconBgClass}`}
+        >
           <svg
-            className="h-6 w-6 text-red-600"
+            className={`h-6 w-6 ${iconColorClass}`}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
           >
+            {/* Kita pakai icon tanda tanya/seru umum */}
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -45,12 +59,14 @@ const ConfirmationModal = ({
           >
             Batal
           </Button>
+
+          {/* Tombol Konfirmasi (Warna & Teks Dinamis) */}
           <Button
             onClick={onConfirm}
             loading={isLoading}
-            className="w-full bg-red-600 hover:bg-red-700 text-white border-red-600"
+            className={`w-full ${buttonClass}`}
           >
-            Hapus
+            {confirmLabel}
           </Button>
         </div>
       </div>
