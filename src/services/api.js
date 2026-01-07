@@ -73,8 +73,8 @@ export const authService = {
 
 // Order Services
 export const salesService = {
-  getAll: async () => {
-    const response = await api.get("/orders");
+  getAll: async (params) => {
+    const response = await api.get("/orders", { params });
     return response.data;
   },
 
@@ -101,8 +101,8 @@ export const salesService = {
 
 // Delivery Services
 export const deliveryService = {
-  getAll: async () => {
-    const response = await api.get("/deliveries");
+  getAll: async (params) => {
+    const response = await api.get("/deliveries", { params });
     return response.data;
   },
 
