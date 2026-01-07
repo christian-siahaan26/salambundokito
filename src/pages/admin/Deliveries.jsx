@@ -13,37 +13,54 @@ const AdminDeliveries = () => {
   const [loading, setLoading] = useState(true);
   const [alert, setAlert] = useState(null);
 
+  // --- 1. STATE PAGINATION ---
+  const [currentPage, setCurrentPage] = useState(1);
+  const [limit] = useState(10); // Limit 10 data per halaman
+  const [meta, setMeta] = useState({
+    total: 0,
+    lastPage: 1,
+    hasNextPage: false,
+    hasPrevPage: false,
+    page: 1,
+  });
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState({
     order_id: "",
     courir_name: "",
   });
   const [submitLoading, setSubmitLoading] = useState(false);
-  const [error, setError] = useState("");
+  // const [error, setError] = useState(""); // Sudah diganti Alert
 
+  // --- 2. FETCH ULANG SAAT currentPage BERUBAH ---
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [currentPage]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
 
+      // Kirim params page & limit ke deliveryService
       const [deliveriesRes, courirsRes] = await Promise.all([
-        deliveryService.getAll(),
+        deliveryService.getAll({ page: currentPage, limit: limit }),
         authService.getCourirs(),
       ]);
 
-      if (
-        deliveriesRes.status &&
-        deliveriesRes.data &&
-        Array.isArray(deliveriesRes.data.data)
-      ) {
-        setDeliveries(deliveriesRes.data.data);
-      } else if (Array.isArray(deliveriesRes.data)) {
-        setDeliveries(deliveriesRes.data);
+      // --- HANDLE RESPONSE DELIVERIES (PAGINATION) ---
+      if (deliveriesRes.status && deliveriesRes.data) {
+        // Cek apakah formatnya pagination (ada .data dan .meta)
+        if (Array.isArray(deliveriesRes.data.data)) {
+          setDeliveries(deliveriesRes.data.data);
+          setMeta(deliveriesRes.data.meta || {});
+        }
+        // Fallback jika backend mengirim array langsung (belum pagination)
+        else if (Array.isArray(deliveriesRes.data)) {
+          setDeliveries(deliveriesRes.data);
+        }
       }
 
+      // --- HANDLE RESPONSE COURIERS ---
       if (
         courirsRes.status &&
         courirsRes.data &&
@@ -60,6 +77,19 @@ const AdminDeliveries = () => {
     }
   };
 
+  // --- 3. HANDLER PAGINATION ---
+  const handleNextPage = () => {
+    if (meta.hasNextPage) {
+      setCurrentPage((prev) => prev + 1);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (meta.hasPrevPage) {
+      setCurrentPage((prev) => prev - 1);
+    }
+  };
+
   const handleInputChange = (e) => {
     setFormData({
       ...formData,
@@ -73,7 +103,6 @@ const AdminDeliveries = () => {
     setAlert(null);
 
     if (!formData.courir_name) {
-      // setError("Silakan pilih kurir terlebih dahulu");
       setAlert({
         type: "error",
         message: "Silahkan pilih kurir terlebih dahulu",
@@ -88,7 +117,7 @@ const AdminDeliveries = () => {
       if (response.status) {
         setIsModalOpen(false);
         setFormData({ order_id: "", courir_name: "" });
-        fetchData();
+        fetchData(); // Refresh data
         setAlert({
           type: "success",
           message: "Pengiriman berhasil dibuat!",
@@ -147,9 +176,15 @@ const AdminDeliveries = () => {
 
       <div className="space-y-6">
         <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold text-gray-900">
-            Status Pengantaran
-          </h1>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">
+              Status Pengantaran
+            </h1>
+            {/* Tampilkan Total Data */}
+            <p className="text-sm text-gray-500 mt-1">
+              Total Pengiriman: <b>{meta.total || deliveries.length}</b>
+            </p>
+          </div>
           <Button onClick={() => setIsModalOpen(true)}>
             + Buat Pengiriman
           </Button>
@@ -213,6 +248,36 @@ const AdminDeliveries = () => {
               </tbody>
             </table>
           </div>
+
+          {/* --- 4. TOMBOL NAVIGASI HALAMAN --- */}
+          {!loading && deliveries.length > 0 && (
+            <div className="flex items-center justify-between border-t pt-4 mt-4 px-2">
+              <div className="text-sm text-gray-700">
+                Halaman <span className="font-bold">{currentPage}</span> dari{" "}
+                <span className="font-bold">{meta.lastPage || 1}</span>
+              </div>
+
+              <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePrevPage}
+                  disabled={!meta.hasPrevPage || loading}
+                >
+                  &larr; Sebelumnya
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleNextPage}
+                  disabled={!meta.hasNextPage || loading}
+                >
+                  Selanjutnya &rarr;
+                </Button>
+              </div>
+            </div>
+          )}
         </Card>
       </div>
 
@@ -222,11 +287,9 @@ const AdminDeliveries = () => {
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
             <h2 className="text-xl font-bold mb-4">Buat Pengiriman Baru</h2>
 
-            {error && (
-              <div className="mb-4 p-3 bg-red-100 text-red-700 rounded text-sm">
-                {error}
-              </div>
-            )}
+            {/* Error di modal bisa dihapus jika sudah pakai Alert global, 
+                atau biarkan saja untuk backup */}
+            {/* {error && (...)} */}
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* INPUT ORDER ID */}
