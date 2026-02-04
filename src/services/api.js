@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "https://ecommerce-tabung-gas.vercel.app";
+  import.meta.env.VITE_API_URL || "https://salambundokito-api.vercel.app";
 
 const api = axios.create({
   baseURL: API_BASE_URL,
