@@ -79,7 +79,7 @@ const Register = () => {
             <div className="w-12 h-12 bg-primary-600 rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-2xl">G</span>
             </div>
-            <span className="text-2xl font-bold text-gray-900">Gas 3Kg</span>
+            <span className="text-2xl font-bold text-gray-900">PT. Salam Bundo Kito</span>
           </Link>
         </div>
 

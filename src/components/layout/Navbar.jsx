@@ -33,7 +33,7 @@ const Navbar = () => {
             <div className="w-10 h-10 bg-primary-600 rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-xl">G</span>
             </div>
-            <span className="text-xl font-bold text-gray-900">Gas 3Kg</span>
+            <span className="text-xl font-bold text-gray-900">PT. Salam Bundo Kita</span>
           </Link>
 
           {/* Desktop Menu */}
