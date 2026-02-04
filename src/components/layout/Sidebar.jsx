@@ -131,12 +131,6 @@ const Sidebar = ({ isOpen, onClose }) => {
         className={`
           fixed inset-y-0 left-0 z-30 w-64 bg-white shadow-lg flex flex-col transition-transform duration-300 ease-in-out
           md:translate-x-0 
-          
-          /* --- PERUBAHAN ADA DI SINI --- */
-          /* Gunakan 'sticky' agar menempel saat scroll, dan 'top-0' untuk menempel di atas */
-          /* Gunakan 'h-screen' (bukan min-h) agar tingginya pas 1 layar dan tidak ikut memanjang */
-          md:sticky md:top-0 md:h-screen 
-          /* ----------------------------- */
 
           ${isOpen ? "translate-x-0" : "-translate-x-full"} 
         `}
@@ -146,7 +140,7 @@ const Sidebar = ({ isOpen, onClose }) => {
           {/* Header Sidebar */}
           <div className="mb-8 flex justify-between items-start">
             <div>
-              <h2 className="text-xl font-bold text-gray-900">Gas 3Kg</h2>
+              <h2 className="text-xl font-bold text-gray-900">PT. Salam Bundo Kito</h2>
               <p className="text-sm text-gray-600 mt-1">{user?.role}</p>
             </div>
 
